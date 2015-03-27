@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lfm status="ok">
+<scrobbles accepted="1" ignored="0">
+            <scrobble>
+        <track corrected="0">Lärmpegel Dreizehn</track>
+        <artist corrected="0">Dkf</artist>
+        <album corrected="0">Lärmpegel Maximum</album>
+        <albumArtist corrected="0"></albumArtist>
+        <timestamp>1424826985</timestamp>
+        <ignoredMessage code="0"></ignoredMessage>
+    </scrobble>
+    </scrobbles></lfm>

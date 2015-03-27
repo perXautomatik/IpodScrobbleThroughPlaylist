@@ -1,0 +1,15 @@
+<component name="libraryTable">
+  <library name="org.codehaus.jackson:jackson-mrbean:1.9.11" type="repository">
+    <properties maven-id="org.codehaus.jackson:jackson-mrbean:1.9.11" />
+    <CLASSES>
+      <root url="jar://C:/jdk/Maven/jackson-mrbean-1.9.11.jar!/" />
+      <root url="jar://C:/jdk/Maven/jackson-mapper-asl-1.9.11.jar!/" />
+      <root url="jar://C:/jdk/Maven/jackson-core-asl-1.9.11.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://C:/jdk/Maven/jackson-mrbean-1.9.11-sources.jar!/" />
+      <root url="jar://$USER_HOME$/.ideaLibSources/jackson-mapper-asl-1.9.11-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

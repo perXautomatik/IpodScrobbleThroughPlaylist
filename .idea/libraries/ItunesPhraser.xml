@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="ItunesPhraser">
+    <CLASSES>
+      <root url="jar://C:/jdk/iTunesUtilities-master/out/artifacts/com_jar/com.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://C:/jdk/iTunesUtilities-master/src/com/worldsworstsoftware" />
+      <root url="file://C:/jdk/iTunesUtilities-master/src" />
+    </SOURCES>
+  </library>
+</component>

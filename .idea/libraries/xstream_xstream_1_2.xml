@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="xstream:xstream:1.2" type="repository">
+    <properties maven-id="xstream:xstream:1.2" />
+    <CLASSES>
+      <root url="jar://C:/jdk/Maven/xstream-1.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ideaLibSources/xstream-1.2-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

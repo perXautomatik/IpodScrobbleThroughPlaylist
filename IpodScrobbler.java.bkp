@@ -1,0 +1,1687 @@
+package ModuleScrobbler;
+
+import com.worldsworstsoftware.itunes.ItunesTrack;
+import com.worldsworstsoftware.itunes.parser.ItunesLibraryParser;
+import com.worldsworstsoftware.itunes.parser.logging.DefaultParserStatusUpdateLogger;
+import de.umass.lastfm.Authenticator;
+import de.umass.lastfm.Session;
+import de.umass.lastfm.Track;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.json.JSONObject;
+
+import java.awt.*;
+import java.io.*;
+import java.lang.reflect.Field;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.Charset;
+import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.List;
+
+import static de.umass.util.StringUtilities.md5;
+
+/**
+ * Created by Christoffer on 2015-01-11.
+ */
+public class IpodScrobbler {
+    public static final String HOMEFOLDER = "C:\\Users\\christoffer\\";
+    public static final String PROJECTFOLDER = HOMEFOLDER + "Cygwin\\Home\\";
+    //private static final String MP3LENGHT = "1min.mp3";
+    private static final String USERNAME = "konstruktor_k";
+    private static final String SECRET = "09140722c7f851f00908d3fd4d14c692";
+    public static final String APIKEY = "d165934486baa1453af66ca761cb180d";
+    public static final String TIMEZONE = "UTC+01";
+
+    public static String stripNonDigits(
+            final CharSequence input /* inspired by seh's comment */){
+        final StringBuilder sb = new StringBuilder(
+                input.length() /* also inspired by seh's comment */);
+        for(int i = 0; i < input.length(); i++){
+            final char c = input.charAt(i);
+            if(c > 47 && c < 58){
+                sb.append(c);
+            }
+        }
+        return String.valueOf(sb.length() > 0 ? sb.toString() : 0);
+    }
+
+    public static String stripNonAlphaNumerical(
+            final CharSequence input /* inspired by seh's comment */){
+        final StringBuilder sb = new StringBuilder(
+                input.length() /* also inspired by seh's comment */);
+        for(int i = 0; i < input.length(); i++){
+            final char c = input.charAt(i);
+            if((c > 47 && c < 58)||(c > 64 && c < 123)|| c == 32){
+                sb.append(c);
+            }
+        }
+        return String.valueOf(sb.length() > 0 ? sb.toString() : 0);
+    }
+
+    private static Map<String, ScrobbleObject> getCombinationOfTwoMaps(Map<String, ScrobbleObject> leftMap, Map<String, ScrobbleObject> rightMap)
+    {
+        Map<String, ScrobbleObject> returnMap = new HashMap<String, ScrobbleObject>();
+        returnMap.putAll(leftMap);
+
+        for (ScrobbleObject rightsValue : rightMap.values())
+        {
+            final int inputsPlayCount = rightsValue.getScrobbleCount();
+
+            ScrobbleObject formerObject = returnMap.put(nameGen(rightsValue), rightsValue);
+
+            if (formerObject != null)
+            {
+                returnMap.get(nameGen(rightsValue)).setScrobbleCount(inputsPlayCount + formerObject.getScrobbleCount());
+            }
+        }
+        return returnMap;
+    }
+
+    private static String nameGen(ScrobbleObject scrobbleObject) {
+        String album;
+        String title;
+        String artist;
+
+
+        int albumLenght = 0;
+        try {
+            album = scrobbleObject.getAlbum();
+            albumLenght = album.length();
+        } catch (Exception e) {
+            album = "";
+        }
+
+
+        int artistLenght = 0;
+        try {
+            artist = scrobbleObject.getArtist();
+            artistLenght = artist.length();
+        } catch (Exception e) {
+            artist = "";
+        }
+
+        int titleLenght = 0;
+        try {
+            title = scrobbleObject.getTitle();
+            titleLenght = title.length();
+        } catch (Exception e) {
+            title = "";
+        }
+
+//        if(title.contains("Strass"))
+//        {
+//            System.out.print("error");
+//        }
+
+        String returnString = "";
+        switch (3 <= artistLenght ? 3 : artistLenght) {
+            case (3): {
+                returnString += (String.valueOf(artist.charAt(2)) + artist.charAt(artistLenght - 3));
+            }
+            case 2: {
+                returnString += (String.valueOf(artist.charAt(1)) + artist.charAt(artistLenght - 2));
+            }
+            case 1: {
+                returnString += (String.valueOf(artist.charAt(0)) + artist.charAt(artistLenght - 1));
+                break;
+            }
+            case 0:
+        }
+
+        switch (3 <= titleLenght ? 3 : titleLenght) {
+
+            case (3): {
+                returnString += (String.valueOf(title.charAt(2)) + title.charAt(titleLenght - 3));
+            }
+            case 2: {
+                returnString += (String.valueOf(title.charAt(1)) + title.charAt(titleLenght - 2));
+            }
+            case 1: {
+                returnString += (String.valueOf(title.charAt(0)) + title.charAt(titleLenght - 1));
+                break;
+            }
+            case 0:
+        }
+
+        switch (3 <= albumLenght ? 3 : albumLenght) {
+
+            case (3): {
+                returnString += (String.valueOf(album.charAt(2)) + album.charAt(albumLenght - 3));
+            }
+            case 2: {
+                returnString += (String.valueOf(album.charAt(1)) + album.charAt(albumLenght - 2));
+            }
+            case 1: {
+                returnString += (String.valueOf(album.charAt(0)) + album.charAt(albumLenght - 1));
+                break;
+            }
+            case 0:
+        }
+        returnString += (String.valueOf(artistLenght) + titleLenght + albumLenght);
+        returnString = returnString.toLowerCase();
+
+        return returnString;
+    }
+
+    private static HashMap jsonUrlToHashTable(String url) throws IOException {
+
+        return new ObjectMapper().readValue((readJsonFromUrl(url).toString()), HashMap.class);
+    }
+
+    private static String readerToString(Reader rd) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        int cp;
+        while ((cp = rd.read()) != -1) {
+            sb.append((char) cp);
+        }
+        return sb.toString();
+    }
+
+    public static JSONObject readJsonFromUrl(String url) throws IOException {
+        InputStream is = new URL(url).openStream();
+        try
+        {
+            BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
+            String jsonText = readerToString(rd);
+            return new JSONObject(jsonText);
+
+        } finally {
+            is.close();
+        }
+
+    }
+
+    private static Map urlXmlToMap(String url) throws IOException {
+        String jsonText = null;
+        if (url.contains("&format=json")) {
+            url = url.replaceAll("&format=json", "");
+        }
+        InputStream is = new URL(url).openStream();
+        BufferedReader rd = new BufferedReader(new InputStreamReader(is, Charset.forName("UTF-8")));
+        jsonText = readerToString(rd);
+
+        Map map2 = new HashMap<String, ScrobbleObject>();
+
+        for (String stringb : jsonText.split("</track>")) {
+            ScrobbleObject temp = null;
+            for (String string : stringb.split("<")) {
+                String album = null;
+                String artist = null;
+                String title = null;
+                if (string.startsWith("artist"))
+                    artist = string.split(">")[1];
+                else if (string.startsWith("name"))
+                    title = string.split(">")[1];
+                else if (string.startsWith("album"))
+                    album = string.split(">")[1];
+
+                temp = new ScrobbleObject(title,artist,album);
+            }
+            map2.put(nameGen(temp), temp);
+        }
+        return map2;
+    }
+
+    private static Map<String, ScrobbleObject> fetchScrobbles
+            (
+                    boolean ignoreDb,
+                    Map<String, ScrobbleObject> referenceMap
+            )
+            throws IOException {
+
+        Map<String, ScrobbleObject> outPutMap = new HashMap<String, ScrobbleObject>();
+
+        final String dbLocation = PROJECTFOLDER + "\\" + "onlineFetch";
+
+        if (!new File(dbLocation).exists() || ignoreDb)
+        {
+            HashMap<String, HashMap<String, HashMap<String, HashMap<String, HashMap<String, String>>>>> mapForTotalPages;
+
+            for (int keyFrom : SessionSaver.getMap().keySet())
+            {
+                Map<String, ScrobbleObject> gatheredMap = new HashMap<String, ScrobbleObject>();
+
+                int valueTo = SessionSaver.getMap().get(keyFrom);
+
+                final String segmentSession = PROJECTFOLDER + "\\" + "from_" + keyFrom + "to_" + valueTo;
+
+                if (!new File(segmentSession).exists() || ignoreDb)
+                {
+                    gatheredMap = onlineScrobbleFetch(keyFrom, valueTo, USERNAME);
+
+                    storeMap(gatheredMap, segmentSession);
+                }
+
+                else
+                {
+                    insertRightMapIntoLeft(gatheredMap, dbReadToFrom(segmentSession));
+                }
+                insertRightMapIntoLeft(outPutMap, gatheredMap);
+            }
+            mapGeneralize(outPutMap);
+            mapGeneralize(outPutMap, referenceMap);
+            mapGeneralize(outPutMap);
+
+            storeMap(outPutMap, dbLocation);
+
+            return outPutMap;
+        }
+
+        else
+        {
+           return dbReadToFrom(dbLocation);
+        }
+    }
+
+    public static Map<String, ScrobbleObject> onlineScrobbleFetch(int keyFrom, int valueTo, String username) throws IOException {
+        HashMap<String, HashMap<String, ArrayList<HashMap<String, HashMap<String, String>>>>> currentPage = new HashMap<String, HashMap<String, ArrayList<HashMap<String, HashMap<String, String>>>>>();
+        HashMap<String, HashMap<String, HashMap<String, HashMap<String, HashMap<String, String>>>>> mapForTotalPages;
+        Map<String, ScrobbleObject> gatheredMap = new HashMap<String, ScrobbleObject>();
+        String title;
+        String artist;
+        String album;
+        String timeFrame = "&to=" + valueTo + "&from=" + keyFrom;
+
+        mapForTotalPages = jsonUrlToHashTable("http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=" + username + "&api_key=" + APIKEY + timeFrame + "&format=json");
+
+        int totalPages = Integer.parseInt(String.valueOf(mapForTotalPages.get("recenttracks").get("@attr").get("totalPages")));
+        int playCount = Integer.parseInt(String.valueOf(mapForTotalPages.get("recenttracks").get("@attr").get("total")));
+
+        Progressbar progressbar = new Progressbar(totalPages, "\nfetchScrobbles from: " + unixTimeToFormatedString(keyFrom) + " to: " + unixTimeToFormatedString(valueTo) + " PROGRESS:");
+
+        for (int i = 0; i < totalPages; i++)
+        {
+            timeFrame = "&to=" + valueTo + "&from=" + keyFrom + "&page=" + i;
+            Map<String,ScrobbleObject> currentPageMap = new HashMap<String, ScrobbleObject>();
+            String url = null;
+            try {
+                url = "http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=" + username + "&api_key=" + APIKEY + timeFrame;
+                currentPage =
+                        jsonUrlToHashTable(url + "&format=json");
+            } catch (Exception e) {
+                System.out.println("@page:" + i);
+                System.out.print(e.fillInStackTrace());
+
+                currentPageMap = urlXmlToMap(url);
+            }
+
+            if (currentPageMap.size() > 1) {
+                for(ScrobbleObject newScrobbleObject: currentPageMap.values())
+                {
+                    String newName = null;
+
+                    if (newName != "000"){
+                        //IpodScrobbler.ScrobbleObject newScrobbleObject = new IpodScrobbler.ScrobbleObject(title, artist, album);
+                        newName = nameGen(newScrobbleObject);
+
+                        adScrobbleObjectToMap(gatheredMap, newScrobbleObject);
+                    }
+                }
+            }
+            else
+            {
+
+                try{
+                    for (HashMap<String, HashMap<String, String>> track : currentPage.get("recenttracks").get("track"))
+                    {
+                        try {
+                            title = String.valueOf(track.get("name"));
+                        } catch (Exception e) {
+                            System.out.print(e + "@title");
+                            title = "";
+                        }
+                        try {
+                            artist = track.get("artist").get("#text");
+                        } catch (Exception e) {
+                            System.out.print(e + "@artist");
+                            artist = "";
+                        }
+                        try {
+                            album = track.get("album").get("#text");
+                        } catch (Exception e) {
+                            System.out.print(e + "@album");
+                            album = "";
+                        }
+
+                        ScrobbleObject newScrobbleObject = new ScrobbleObject(title, artist, album);
+
+                        adScrobbleObjectToMap(gatheredMap, newScrobbleObject);
+                    }
+
+                }
+                catch (Exception e){
+                    System.out.print(e + "@");
+                }
+            }
+
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+
+            progressbar.printAndIncrement();
+        }
+        gatheredMap.put("playCount",new ScrobbleObject(playCount));
+        return gatheredMap;
+    }
+
+    private static String unixTimeToFormatedString(int unixInt) {
+        Date dateFrom = new Date(unixInt *1000L); // *1000 is to convert seconds to milliseconds
+        SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm:ss z"); // the format of your date
+        sdf.setTimeZone(TimeZone.getTimeZone(TIMEZONE));
+        return sdf.format(dateFrom);
+    }
+
+    private static void insertRightMapIntoLeft(Map<String, ScrobbleObject> leftMap, Map<String, ScrobbleObject> rightMap)
+    {
+        for (ScrobbleObject rightsValue : rightMap.values())
+        {
+            //final int inputsPlayCount = rightsValue.getScrobbleCount();
+
+            adScrobbleObjectToMap(leftMap, rightsValue);
+        }
+    }
+
+    private static void storeMap(Map<String, ScrobbleObject> scrobbleObjectMap, String fileName)
+    {
+        int entriesWritten=0;
+
+        PrintWriter writerOLD = null;
+        try {
+            writerOLD = new PrintWriter(fileName);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        if (writerOLD != null)
+        {
+            for (ScrobbleObject value : scrobbleObjectMap.values())
+            {
+               writerOLD.println(new StringBuilder().append(value.getTitle()).append("\t").append(value.getArtist()).append("\t").append(value.getAlbum()).append("\t").append(value.getScrobbleCount()).toString());
+                entriesWritten++;
+            }
+            System.out.println(entriesWritten + "entries written, closing database");
+
+            writerOLD.close();
+        }
+    }
+
+    private static Map<String, ScrobbleObject> dbReadToFrom(String dbLocation) throws FileNotFoundException {
+        String title;
+        String artist;
+        String album;
+        int playCount;
+
+        HashMap<String, ScrobbleObject> scrobbleObjects = new HashMap<String, ScrobbleObject>();
+
+        Scanner in = new Scanner(new File(dbLocation));
+
+            while (in.hasNext())
+            {
+                String line = in.nextLine();
+                if(line != null)
+                    try {
+                        Scanner lineIn = new Scanner(line);
+                        lineIn.useDelimiter("\t");
+
+                        title = lineIn.next();
+                        artist = lineIn.next();
+                        album = lineIn.next();
+                        playCount = lineIn.nextInt();
+
+                        ScrobbleObject scrobbleObject = new ScrobbleObject(title, artist, album, playCount);
+
+                        scrobbleObjects.put(nameGen(scrobbleObject), scrobbleObject);
+                        lineIn.close();
+                    } catch (Exception e) {
+                        System.out.print(e + "@database text readin");
+                    }
+                else
+                    System.out.println("null encountered");
+            }
+            in.close();
+        return scrobbleObjects;
+        }
+
+    private static Map<String, ScrobbleObject> convertItunesLibToScrobble(Map<String, ItunesTrack> library)
+    {
+        Map<String, ScrobbleObject> toScroMap = new HashMap<String, ScrobbleObject>();
+        Progressbar progress = new Progressbar(library.size(),"convertItunesLibToScrobble:");
+
+        for (ItunesTrack value : library.values())
+        {
+            if(value.getPlayCount() > 0) {
+                final ScrobbleObject scrobbleObject = new ScrobbleObject( value.getName(),value.getArtist(), value.getAlbum(), value.getPlayCount());
+                toScroMap.put(nameGen(scrobbleObject), scrobbleObject);
+            }
+        progress.printAndIncrement();
+        }
+
+        return toScroMap;
+    }
+
+    /*        fetchedScrobbles = sortMapByPlayCount(fetchedScrobbles);
+            extractedFromItunes = sortMapByPlayCount(extractedFromItunes);
+            for (IpodScrobbler.ScrobbleObject value : fetchedScrobbles.values()) {
+                if(i < i1)
+                {
+                    System.out.println(value.getScrobbleCount() + " : " + value.present());
+                    i++;
+                }
+                else {
+                    break;
+                }
+            }*/
+    private static void analyzePlayCount(Map<String, ScrobbleObject> extractedFromItunes, Map<String, ScrobbleObject> fetchedScrobbles, Map<String, ScrobbleObject> ressultList, Map<String, ScrobbleObject> tracksToRemove, Map<String, ScrobbleObject> aliens) throws IOException, NoSuchAlgorithmException {
+//        if(fetchedScrobbles.getMap("playcount") != null)
+//            System.out.println("number of succesful notCountedScrobbles: " + fetchedScrobbles.getMap("playcount").getScrobbleCount());
+
+        final int i2 = countScrobbles(extractedFromItunes);
+        final int i3 = countScrobbles(fetchedScrobbles);
+        final int i4 = countScrobbles(ressultList);
+        final int i5 = countScrobbles(aliens);
+
+        System.out.println("\niTunes playcount: " + i2);
+        System.out.println("number of succesful scrobbles: " + i3);
+        System.out.println("scrobbles left according to filter: " + i4);
+        System.out.println("number of scrobbles that should be left: " + String.valueOf(i2 - i3));
+        System.out.println("error size of: " + String.valueOf(i4 - (i2 - i3)));
+        System.out.println("aliens: " + aliens.size());
+
+        tracksToRemove = sortMapByPlayCount(tracksToRemove);
+
+        System.out.println();
+        ressultList = sortMapByPlayCount(ressultList);
+        aliens = sortMapByPlayCount(aliens);
+    int i = 0;
+        final int i1 = 5;
+
+
+
+        System.out.println("aliens");
+        i = 0;
+
+        for (ScrobbleObject value : aliens.values()) {
+            if(i < i1)
+            {
+                System.out.println(value.getScrobbleCount() + " : " + value.present());
+                i++;
+            }
+            else {
+                break;
+            }
+        }
+
+        System.out.println("to scrobble");
+        i = 0;
+        for (ScrobbleObject value : ressultList.values()) {
+            if(i < i1)
+            {
+                System.out.println(value.getScrobbleCount() + " : " + value.present()+ " : " + nameGen(value));
+                i++;
+            }
+            else
+                break;
+        }
+        System.out.println();
+
+        for (ScrobbleObject value : tracksToRemove.values())
+        {
+            System.out.println(
+            value.getScrobbleCount() + " : " +
+            "http://last.fm/user/konstruktor_k/library/music/" +
+            URLEncoder.encode(value.getArtist())+"/_/"+URLEncoder.encode(URLEncoder.encode(value.getTitle())));
+        }
+    }
+
+    private static void subtractLeftFromRight(Map<String, ScrobbleObject> leftMap, Map<String, ScrobbleObject> rightMap, Map<String, ScrobbleObject> negativePlays, Map<String, ScrobbleObject> aliens) {
+        List<ScrobbleObject> rightList = new ArrayList<ScrobbleObject>();
+        List<ScrobbleObject> leftList = new ArrayList<ScrobbleObject>();
+        int negativePlayCount = 0;
+        rightList.addAll(rightMap.values());
+        leftList.addAll(leftMap.values());
+        Progressbar progressbar = new Progressbar(leftList.size(), "subtracting left from right");
+
+
+        for (int leftIndex = 0; leftIndex < leftList.size(); leftIndex++)
+        {
+            final ScrobbleObject leftObject = leftList.get(leftIndex);
+            boolean alien = true;
+            if(leftObject.getArtist().toLowerCase().equals("sleeping prophet"))
+            {
+                alien = alien;
+            }
+
+            for (int rightIndex = 0; rightIndex < rightList.size(); rightIndex++)
+            {
+                final ScrobbleObject rightObject = rightList.get(rightIndex);
+
+                if (rightObject != null)
+                {
+                    if(rightObject.getArtist().toLowerCase().equals("sleeping prophet"))
+                    {
+                        alien = alien;
+                    }
+
+                    try {
+                        if (rightObject.equals(leftObject))
+                        {
+                            rightList.set(rightIndex, null);
+                            leftList.set(leftIndex, null);
+                            alien = false;
+                            break;
+                        } else {
+                            alien = true;
+                        }
+
+                    }
+                    catch (PlayCountDifferentException e)
+                    {
+                        alien = false;
+                        rightObject.subtractPlayCount(leftObject);
+                        leftList.set(leftIndex, null);
+                        if (rightObject.getScrobbleCount() < 0) {
+                            negativePlayCount += rightObject.getScrobbleCount();
+
+                            negativePlays.put(nameGen(rightObject), rightObject);
+
+                            rightList.set(rightIndex, null);
+                            break;
+                        }
+                    }
+                }
+            }
+            if(alien)
+            {
+                adScrobbleObjectToMap(aliens, leftObject);
+            }
+            progressbar.printAndIncrement();
+        }
+
+        rightMap.clear();
+        for (ScrobbleObject a : rightList)
+        {
+            if (a != null)
+                rightMap.put(nameGen(a), a);
+        }
+
+        System.out.println("negativePlayCount: " + negativePlayCount);
+    }
+
+    private static void adScrobbleObjectToMap(Map<String, ScrobbleObject> map, ScrobbleObject objectToInsert) {
+        final String nameOfInserted1 = nameGen(objectToInsert);
+        final ScrobbleObject replaced = map.put(nameOfInserted1,objectToInsert);
+
+        if (replaced != null) {
+            map.get(nameOfInserted1).increasePlayCountWith(replaced);
+        }
+    }
+
+    private static int countScrobbles(Map<String, ScrobbleObject> maptToCount)
+    {
+        int sum = 0;
+
+        for (ScrobbleObject value : maptToCount.values()) {
+            if (value.getScrobbleCount() <= 40) {
+                sum += value.getScrobbleCount();
+            }
+
+        }
+        return sum;
+    }
+
+    private static void findAndActOnDupes(Map<String, ScrobbleObject> mapToCheck, Map<String, ScrobbleObject> referenceMap)
+    {
+        Scanner in = new Scanner(System.in);
+        char choice;
+        List<ScrobbleObject> thisObjectSet = new LinkedList<ScrobbleObject>();
+        List<ScrobbleObject> isActuallyThatObjectSet = new LinkedList<ScrobbleObject>();
+
+        findDupes(mapToCheck, referenceMap, thisObjectSet, isActuallyThatObjectSet);
+
+        int index = 0;
+        Iterator<ScrobbleObject> iterator2 = isActuallyThatObjectSet.iterator();
+        for (ScrobbleObject thisObject : thisObjectSet)
+        {
+            ScrobbleObject isActuallyThatObject = iterator2.next();
+
+            System.out.println(thisObject.present() + ":" + nameGen(thisObject) + "\n " + isActuallyThatObject.present() + ":" + nameGen(isActuallyThatObject));
+
+            System.out.println(index++ + " of " + thisObjectSet.size() + " is same?");
+
+            choice = in.next().charAt(0);
+            if (choice == 'y') {
+                NameDupes.add(thisObject, isActuallyThatObject);
+            } else if (choice == 'q')
+                break;
+
+            iterator2.hasNext();
+        }
+    }
+
+    private static int findDupes(Map<String, ScrobbleObject> innerMapSmall, Map<String, ScrobbleObject> outerMapBig, List<ScrobbleObject> thisObjectMap, List<ScrobbleObject> isActuallyThatObjectMap)
+    {
+        Progressbar progressbar = new Progressbar(outerMapBig.size(),"finding dupes:");
+        int nrOfDupes =0;
+
+        for (ScrobbleObject bigMapEntry : outerMapBig.values())
+        {
+
+            for (ScrobbleObject smallMapEntry : innerMapSmall.values())
+            {
+                final boolean sameAlbum = stripNonAlphaNumerical(bigMapEntry.getAlbum()).trim().toLowerCase().equals(stripNonAlphaNumerical(smallMapEntry.getAlbum()).trim().toLowerCase());
+                final boolean sameArtist = stripNonAlphaNumerical(bigMapEntry.getArtist()).trim().toLowerCase().equals(stripNonAlphaNumerical(smallMapEntry.getArtist()).trim().toLowerCase());
+                final boolean sameTitle = stripNonAlphaNumerical(bigMapEntry.getTitle()).trim().toLowerCase().equals(stripNonAlphaNumerical(smallMapEntry.getTitle()).trim().toLowerCase());
+
+                if (sameAlbum && (!sameArtist && sameTitle || sameArtist) || sameTitle || sameAlbum)
+                {
+                    thisObjectMap.add(smallMapEntry);
+                    isActuallyThatObjectMap.add(bigMapEntry);
+                    nrOfDupes++;
+                }
+            }
+            progressbar.printAndIncrement();
+        }
+        return nrOfDupes;
+    }
+
+    public static void scrobbleMap(Map<String, ScrobbleObject> tempMap, String user) {
+
+        for (ScrobbleObject scrobbleObject : tempMap.values())
+        {
+            try
+            {
+                if(scrobbleObject.getScrobbleCount() > 0)
+                {
+                    scrobble(getSessionKey(user), scrobbleObject);
+                }
+            }
+            catch (Exception e){
+                System.out.println(e + " @m3uPrint @writerToM3u.println(filename);");
+            }
+        }
+    }
+
+    private static void scrobble(String sessionKey, ScrobbleObject scrobbleObject) throws NoSuchAlgorithmException, IOException {
+
+        //final String method = "playlist.create";
+        //final String method = "user.getRecommendedArtists";
+        //"api_key" + APIKEY + "method" + method + "sk" + sessionKey + SECRET;
+
+        final String method = "track.scrobble";
+
+        for(int i = 0; i < scrobbleObject.getScrobbleCount(); i++)
+        {
+            final long timestamp = System.currentTimeMillis() / 1000L;
+            String apiSig = "album" + scrobbleObject.getAlbum() + "api_key" + APIKEY + "artist"+ scrobbleObject.getArtist() + "method" + method + "sk" + sessionKey + "timestamp" + timestamp + "track" + scrobbleObject.getTitle() + SECRET;
+
+            String hashedSig = md5(apiSig);
+
+            // FOR DEBUGGING
+            System.out.println("api_key = " + APIKEY);
+            System.out.println("api_sig = " + apiSig);
+            System.out.println("session key = " + sessionKey);
+            // FOR DEBUGGING
+
+            String urlParameters = "method=" + method + "&api_key="+ APIKEY + "&api_sig=" + hashedSig + "&sk=" + sessionKey + "&album=" + URLEncoder.encode(scrobbleObject.getAlbum(),"UTF-8") + "&artist="+ URLEncoder.encode(scrobbleObject.getArtist(),"UTF-8") + "&timestamp=" + timestamp + "&track=" + URLEncoder.encode(scrobbleObject.getTitle(), "UTF-8");
+            String request = "http://ws.audioscrobbler.com/2.0/";
+
+            try
+            {
+                Thread.sleep(1000);
+            }
+            catch(InterruptedException ex)
+            {
+                Thread.currentThread().interrupt();
+            }
+
+            URL url = new URL(request);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setDoOutput(true);
+            connection.setDoInput(true);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            connection.setRequestProperty("charset", "utf-8");
+            connection.setRequestProperty("Content-Length", "" + Integer.toString(urlParameters.getBytes().length));
+            connection.setUseCaches(false);
+
+            DataOutputStream wr = new DataOutputStream(connection.getOutputStream());
+            wr.writeBytes(urlParameters);
+            wr.flush();
+            wr.close();
+
+            InputStream is;
+            Scanner s;
+            try {
+                if (connection.getResponseCode() != 200) {
+                    s = new Scanner(connection.getErrorStream());
+                } else {
+                    is = connection.getInputStream();
+                    s = new Scanner(is);
+                }
+                s.useDelimiter("\\Z");
+                String response = s.next();
+                System.out.println("\nResponse: " + response + "\n\n");
+                BufferedWriter out = new BufferedWriter(new FileWriter("requestCreate.xml"));
+                out.write(response);
+                out.close();
+                SessionSaver.add((int)timestamp);
+            }
+
+            catch (IOException e2) {
+                e2.printStackTrace();
+            }
+
+
+            // FOR DEBUGGING
+            try {
+                System.out.println("Response Code: " + connection.getResponseCode());
+                System.out.println("Response Message: " + connection.getResponseMessage());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            // FOR DEBUGGING
+            connection.disconnect();
+        }
+    }
+
+    private static Map sortMapByPlayCount(Map<String, ScrobbleObject> unsortedMap)
+    {
+        List list = new LinkedList(unsortedMap.entrySet());
+//a negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
+        // sort list based on comparator
+		Collections.sort(list, new Comparator() {
+                public int compare(Object o1, Object o2) {
+				return ((Comparable) ((Map.Entry) (o1)).getValue())
+                                       .compareTo(((Map.Entry) (o2)).getValue());
+            }
+            });
+
+        // put sorted list into map again
+        //LinkedHashMap make sure order in which keys were inserted
+        Map sortedMap = new LinkedHashMap();
+        for (Object aList : list) {
+            Map.Entry entry = (Map.Entry) aList;
+            sortedMap.put(entry.getKey(), entry.getValue());
+        }
+        return sortedMap;
+    }
+
+    private static String getSessionKey(String user) throws IOException, NoSuchAlgorithmException
+    {
+        HashMap<String,String> keyCollection = new HashMap<String, String>();
+        final String storageLocation = PROJECTFOLDER + "\\" + "fetchStoredSessionKeys";
+        LoadStoredMap(storageLocation, keyCollection);
+
+        if (keyCollection.containsKey(user))
+        {
+            return keyCollection.get(user);
+        }
+
+        else
+        {
+            Session session = null;
+            //if(fetchPage("http://ws.audioscrobbler.com/2.0/?method=auth.getSession&token="+ token +"&api_key=d165934486baa1453af66ca761cb180d&api_sig=" + SESSION_KEY).split("<lfm status=\"")[1].equals("ok" + '"' + '>'))
+            String token = Authenticator.getToken(APIKEY);
+            //        String tempstring = fetchPage("http://ws.audioscrobbler.com/2.0/?method=auth.gettoken&api_key=" + APIKEY).split("token>")[1];
+            //        String token = tempstring.substring(0,tempstring.length()-2);
+            try
+            {
+                //Set your page url in this string. For eg, I m using URL for Google Search engine
+                Desktop.getDesktop().browse(URI.create("http://www.last.fm/api/auth?api_key=" + APIKEY + "&token=" + token));
+
+                boolean success;
+                do
+                {
+                    try
+                    {
+                        Thread.sleep(3000);
+                        session = Authenticator.getSession(token, APIKEY, SECRET);
+                        success = true;
+                    }
+                    catch (Exception e)
+                    {
+                        success = false;
+                        Thread.currentThread().interrupt();
+                    }
+                } while (!success);
+
+            }
+            catch (IOException e)
+            {
+                System.out.println(e.getMessage());
+            }
+
+            if (session != null) {
+                System.out.println("session=" + session);
+                keyCollection.put(user, session.getKey());
+
+                writeMapStorage(storageLocation,keyCollection);
+                return session.getKey();
+            }
+            else
+                return null;
+        }
+    }
+
+    private static void writeMapStorage(String thisObjectsName, HashMap<String, String> aMap)
+    {
+
+        PrintWriter writerOLD;
+        try
+        {
+            writerOLD = new PrintWriter(thisObjectsName);
+
+            for (String A : aMap.keySet())
+            {
+                writerOLD.println(A + "," + aMap.get(A));
+            }
+
+                writerOLD.close();
+        }
+        catch (FileNotFoundException e)
+        {
+            e.printStackTrace();
+        }
+    }
+
+    private static void LoadStoredMap(String thisObjectsName, HashMap<String,String> aMap)
+    {
+        String actualName = null;
+        Scanner in = null;
+        final File file = new File(thisObjectsName);
+        if(file.exists())
+        {
+            try
+            {
+                in = new Scanner(file);
+                do{
+                    String line = in.nextLine();
+                    try
+                    {
+                        Scanner lineIn = new Scanner(line);
+                        actualName = lineIn.next();
+                        try
+                        {
+                            aMap.put(actualName.split(",")[0], actualName.split(",")[1]);
+                        }
+                        catch (Exception e)
+                        {
+                            System.out.print(e + "@database text readin");
+                        }
+                        lineIn.close();
+                    }
+                    catch (Exception e)
+                    {
+                        System.out.print(e + "@database text readin");
+                    }
+                }while(in.hasNext());
+                in.close();
+            }
+            catch (Exception e)
+            {
+                System.out.println("\n"+ e + "@looking for equality, file: " + file.getName());
+            }
+        }
+    }
+
+    public static void ipodScrobble(String dbLocation1, String libraryLocation) throws IOException, NoSuchAlgorithmException {
+        new NameDupes();
+
+        Map<String, ScrobbleObject> alienEntries = new HashMap<String, ScrobbleObject>();
+        Map<String, ScrobbleObject> referenceMap = new HashMap<String, ScrobbleObject>();
+
+        //SessionSaver fromTo = new SessionSaver(SavedFromTo);
+        new SessionSaver();
+        SessionSaver.read();
+
+        System.out.println("\nsynced Ipod since last program run?");
+        final boolean recentResync = new Scanner(System.in).next().charAt(0) == 'y';
+
+        final Map<String, ScrobbleObject> itunesTracks = itunesFetch(recentResync, dbLocation1, libraryLocation);
+        Map<String, ScrobbleObject> errorSubmissions = new HashMap<String, ScrobbleObject>();
+        Map<String, ScrobbleObject> tracksToScrobble = new HashMap<String, ScrobbleObject>();
+        tracksToScrobble.putAll(itunesTracks);
+        referenceMap.putAll(itunesTracks);
+
+        if (!recentResync) {
+
+            boolean ignoreDb = false;
+
+            do {
+                tracksToScrobble = new HashMap<String, ScrobbleObject>();
+                tracksToScrobble.putAll(itunesTracks);
+
+                errorSubmissions = new HashMap<String, ScrobbleObject>();
+                alienEntries = new HashMap<String, ScrobbleObject>();
+                Map<String, ScrobbleObject> pastSuccessfulScrobbles =
+                        sortMapByPlayCount
+                                (
+                                        fetchScrobbles
+                                                (
+                                                        ignoreDb,
+                                                        referenceMap
+                                                )
+                                );
+
+                subtractLeftFromRight(pastSuccessfulScrobbles, tracksToScrobble, errorSubmissions, alienEntries);
+
+                analyzePlayCount(itunesTracks, pastSuccessfulScrobbles, tracksToScrobble, errorSubmissions, alienEntries);
+
+                System.out.println("\nrefetch?");
+
+                ignoreDb = (new Scanner(System.in).next().charAt(0) == 'y');
+
+            } while (ignoreDb);
+        } else {
+            final Map<String, ScrobbleObject> stringScrobbleObjectMap = sortMapByPlayCount(fetchScrobbles(false, referenceMap));
+            tracksToScrobble = sortMapByPlayCount(tracksToScrobble);
+            fixLibraryInsufficiencyBug(tracksToScrobble, stringScrobbleObjectMap);
+            analyzePlayCount(tracksToScrobble);
+        }
+
+        System.out.print("y to scrobble n findAndActOnDupes");
+
+        if (new Scanner(System.in).next().charAt(0) == 'y') {
+            scrobbleMap(tracksToScrobble, "konstruktor_k");
+            SessionSaver.store();
+        } else if (recentResync)
+        {
+            findAndActOnDupes(tracksToScrobble, dbReadToFrom(dbLocation1));
+            NameDupes.store();
+        }
+        else
+        {
+            findAndActOnDupes(tracksToScrobble, getCombinationOfTwoMaps(errorSubmissions, alienEntries));
+            NameDupes.store();
+        }
+
+        if (recentResync) {
+            System.out.print("store changes to itunes lib?");
+
+            if (new Scanner(System.in).next().charAt(0) == 'y') {
+
+                final Map<String, ScrobbleObject> leftMap = dbReadToFrom(dbLocation1);
+
+                insertRightMapIntoLeft(leftMap, itunesTracks);
+
+                storeMap(leftMap, dbLocation1);
+            }
+        }
+    }
+
+    private static void fixLibraryInsufficiencyBug(Map<String, ScrobbleObject> tracksToScrobble, Map<String, ScrobbleObject> stringScrobbleObjectMap)
+    {
+        System.out.println("before fix " + tracksToScrobble.size());
+        for (ScrobbleObject leftObject : stringScrobbleObjectMap.values())
+        {
+            for (Iterator<ScrobbleObject> iterator = tracksToScrobble.values().iterator(); iterator.hasNext(); ) {
+                ScrobbleObject rightObject = iterator.next();
+                if (rightObject != null && (leftObject != null))
+                {
+                    final int leftObjectScrobbleCount = leftObject.getScrobbleCount();
+                    final int rightObjectScrobbleCount = rightObject.getScrobbleCount();
+                    try {
+                        if (rightObject.equals(leftObject)) {
+                            if (rightObjectScrobbleCount > 4) {
+                                iterator.remove();
+                            }
+                        }
+                    } catch (PlayCountDifferentException e) {
+                        final boolean b = (rightObjectScrobbleCount > 4) & rightObjectScrobbleCount < leftObjectScrobbleCount;
+                        if (b) {
+                            iterator.remove();
+                        }
+                    }
+                }
+            }
+        }
+        System.out.println("after fix " + tracksToScrobble.size());
+    }
+
+    private static void analyzePlayCount(Map<String, ScrobbleObject> tracksToScrobble) {
+        final int i4 = countScrobbles(tracksToScrobble);
+
+        System.out.println("scrobbles left according to filter: " + i4);
+
+        System.out.println();
+        tracksToScrobble = sortMapByPlayCount(tracksToScrobble);
+
+        System.out.println();
+        for (ScrobbleObject value : tracksToScrobble.values())
+        {
+                System.out.println(value.getScrobbleCount() + " : " + value.present()+ " : " + nameGen(value));
+        }
+        System.out.println();
+
+    }
+
+    private static Map<String, ScrobbleObject> itunesFetch(boolean recentResync, String dbLocation, String libraryLocation)
+    {
+        Map<String, ScrobbleObject> dbMap;
+
+        DefaultParserStatusUpdateLogger logger2;
+        logger2 = new DefaultParserStatusUpdateLogger(true, System.out);
+        logger2.setTrackParseUpdateFrequency(200);
+
+        try {
+            dbMap = dbReadToFrom(dbLocation);
+
+            if (recentResync)
+            {
+                Map<String, ScrobbleObject> changesSinceSync = new HashMap<String, ScrobbleObject>();
+
+                ipodExtractPlaycount(
+                        convertItunesLibToScrobble(ItunesLibraryParser.parseLibrary(libraryLocation, logger2).getTracks()),
+                        dbMap,
+                        changesSinceSync);
+
+                return changesSinceSync;
+            }
+            else
+                return dbMap;
+        }
+
+        catch (FileNotFoundException ignore)
+        {
+            dbMap = convertItunesLibToScrobble(ItunesLibraryParser.parseLibrary(libraryLocation, logger2).getTracks());
+            storeMap(dbMap, dbLocation);
+            return dbMap;
+        }
+    }
+
+    private static void ipodExtractPlaycount(Map<String, ScrobbleObject> extractedFromItunes, Map<String, ScrobbleObject> dbMap, Map<String, ScrobbleObject> changesMap) {
+
+        for(String object: extractedFromItunes.keySet())
+        {
+            final ScrobbleObject fetchedObject = extractedFromItunes.get(object);
+            if(dbMap.containsKey(object))
+            {
+                final ScrobbleObject dbObject = dbMap.get(object);
+
+                if(dbObject.getScrobbleCount() > fetchedObject.getScrobbleCount() && fetchedObject.getScrobbleCount() != 0)
+                {
+                    dbObject.increasePlayCountWith(fetchedObject);
+                    changesMap.put(object,fetchedObject);
+                }
+                else if (dbObject.getScrobbleCount() < fetchedObject.getScrobbleCount() && dbObject.getScrobbleCount() != 0)
+                    changesMap.put(object,fetchedObject);
+                    dbObject.setScrobbleCount(fetchedObject.getScrobbleCount());
+            }
+            else
+            {
+                dbMap.put(object, fetchedObject);
+                changesMap.put(object,fetchedObject);
+            }
+        }
+    }
+
+    private static void mapGeneralize(Map<String, ScrobbleObject> mapToCorrect, Map<String, ScrobbleObject> referenceMap) {
+
+        List<ScrobbleObject> correctionList = new ArrayList<ScrobbleObject>();
+        List<ScrobbleObject> referenceList = new ArrayList<ScrobbleObject>();
+
+        correctionList.addAll(mapToCorrect.values());
+        referenceList.addAll(referenceMap.values());
+
+        for(int correctedIndex = 0; correctedIndex < correctionList.size() ; correctedIndex++)
+        {
+            for (ScrobbleObject referenceObject : referenceList)
+            {
+                final ScrobbleObject objectTobeCorrected = correctionList.get(correctedIndex);
+
+                boolean equals;
+                try {
+                    equals = objectTobeCorrected.equals(referenceObject);
+                } catch (PlayCountDifferentException e) {
+                    equals = true;
+                }
+
+                if (equals)
+                {
+                    int containsKeyAt = 0;
+                    boolean containsKey = false;
+                    int i2 = containsKeyAt;
+                    do {
+                        if (i2 != correctedIndex)
+                        {
+                            if (nameGen(correctionList.get(i2)).equals(nameGen(objectTobeCorrected))) {
+
+                                containsKey = true;
+                                containsKeyAt = i2;
+                            }
+                            else
+                            {
+                                i2++;
+                            }
+                        }
+                        else
+                        {
+                            i2++;
+                        }
+                    } while (i2 < correctionList.size() && !containsKey);
+
+                    if (containsKey)
+                    {
+                        final ScrobbleObject nicerLookingObject = correctionList.get(containsKeyAt);
+
+                        System.out.println(objectTobeCorrected.present() + " looksLike: " + referenceObject.present() + ":");
+                        System.out.println(nicerLookingObject.present() + " exsists so we increase it's play count from " + objectTobeCorrected.getScrobbleCount() + " to:");
+
+                        nicerLookingObject.increasePlayCountWith(objectTobeCorrected);
+
+                        System.out.println(nicerLookingObject.getScrobbleCount());
+                        correctionList.set(correctedIndex, null);
+                    }
+                    else
+                    {
+                        System.out.println(objectTobeCorrected.present() + " seems to be same as: " + referenceObject.present() + ": now tbe first look like");
+
+                        ScrobbleObject corrected = new ScrobbleObject(referenceObject);
+
+                        corrected.setScrobbleCount(objectTobeCorrected.getScrobbleCount());
+                        correctionList.set(correctedIndex, corrected);
+
+                        System.out.println(correctionList.get(correctedIndex).present());
+                    }
+                    break;
+                }
+            }
+        }
+        mapToCorrect.clear();
+        for(ScrobbleObject a : correctionList)
+        {
+            if(a != null)
+               mapToCorrect.put(nameGen(a),a);
+        }
+        System.out.print("after genearlization: " + mapToCorrect.size());
+    }
+
+    private static void mapGeneralize(Map<String, ScrobbleObject> map)
+    {
+        System.out.print("\n" + "before genearlization: " + map.size());
+
+        List<ScrobbleObject> listedMap = new ArrayList<ScrobbleObject>();
+        listedMap.addAll(map.values());
+
+        int outerIndex = 0;
+        while (outerIndex < map.size())
+        {
+            final ScrobbleObject outerObject = listedMap.get(outerIndex);
+            boolean outerIndexIncrement = true;
+            if(outerObject != null)
+                for (int innerIndex = 1+outerIndex; innerIndex < map.size(); innerIndex++ )
+                {
+                    final ScrobbleObject innerObject = listedMap.get(innerIndex);
+                    if(innerObject != null && outerObject != null)
+                    {
+                        boolean equals;
+                        try {
+                            equals = innerObject.equals(outerObject);
+                        } catch (PlayCountDifferentException ignore) {
+                            equals = true;
+                        }
+
+                        if (equals)
+                        {
+                            if (outerObject.present().length() > innerObject.present().length()) {
+
+                                System.out.println("\n" + outerObject.present() + " pc: " + outerObject.getScrobbleCount() + ":");
+                                outerObject.increasePlayCountWith(innerObject);
+                                System.out.println(innerObject.present() + " pc: " + innerObject.getScrobbleCount());
+                                System.out.println("combinedResult: " + outerObject.present() + " pc: " + outerObject.getScrobbleCount());
+                                outerIndexIncrement = false;
+                                listedMap.set(innerIndex, null);
+                            }
+                            else
+                            {
+                                System.out.println("\n" + innerObject.present() + " pc: " + innerObject.getScrobbleCount());
+                                innerObject.increasePlayCountWith(outerObject);
+                                System.out.println(outerObject.present() + " pc: " + outerObject.getScrobbleCount() + ":");
+                                System.out.print("combinedResult: " + innerObject.present() + " pc: " + innerObject.getScrobbleCount());
+                                outerIndexIncrement = true;
+                                listedMap.set(outerIndex, null);
+                            }
+                            break;
+                        }
+                    }
+                }
+            if(outerIndexIncrement)
+            outerIndex++;
+        }
+        map.clear();
+        for(ScrobbleObject a : listedMap)
+        {
+            if(a != null)
+            map.put(nameGen(a),a);
+        }
+        System.out.print("\n" + "after genearlization: " + map.size());
+    }
+
+    static final class NameDupes {
+
+        static Map<String, Set<String>> actualName = new HashMap<String, Set<String>>();
+        private static final File REGISTER = new File(PROJECTFOLDER + "\\" + "equalityRegister");
+
+       private NameDupes()
+        {
+            load();
+        }
+
+        private void load()
+        {
+            try {
+                Scanner fileWithLines = new Scanner(REGISTER);
+
+                while (fileWithLines.hasNext()) {
+                    String line = fileWithLines.nextLine();
+                    try {
+                        Scanner lineIn = new Scanner(line);
+                        lineIn.useDelimiter("\t");
+
+                        final String next = lineIn.next();
+                        final Set<String> strings = new HashSet<String>();
+                        strings.add(lineIn.next());
+
+                        actualName.put(next, strings);
+                        lineIn.close();
+                    } catch (Exception e) {
+
+                    }
+                }
+                fileWithLines.close();
+            } catch (Exception e) {
+
+            }
+        }
+
+        static boolean isLeftKnownByRightName(String nameToCheck, String rightNameToCheck)
+        {
+            return actualName.containsKey(nameToCheck) && actualName.get(nameToCheck).contains(rightNameToCheck);
+        }
+
+        static void add(IpodScrobbler.ScrobbleObject thisObject, IpodScrobbler.ScrobbleObject isActuallyThatObject)
+        {
+            final String thisObjectName = nameGen(thisObject);
+            final String isActuallyThatObjectName = nameGen(isActuallyThatObject);
+
+            if (actualName.containsKey(thisObjectName))
+            {
+                actualName.get(thisObjectName).add(isActuallyThatObjectName);
+            }
+            else
+            {
+                Set strings = new HashSet<String>();
+                strings.add(isActuallyThatObjectName);
+                actualName.put(thisObjectName, strings);
+            }
+
+            if(actualName.containsKey(isActuallyThatObjectName))
+                actualName.get(isActuallyThatObjectName).add(thisObjectName);
+            else
+            {
+                Set strings = new HashSet<String>();
+                strings.add(thisObjectName);
+                actualName.put(isActuallyThatObjectName, strings);
+            }
+
+        }
+
+        static void store() throws FileNotFoundException
+        {
+            PrintWriter writerOLD;
+
+            writerOLD = new PrintWriter(REGISTER);
+
+            for (String key : actualName.keySet()) {
+                for(String string : actualName.get(key))
+                {
+                    final String toPrint = key + "\t" + string;
+                    writerOLD.println(toPrint);
+                }
+            }
+            writerOLD.close();
+        }
+    }
+
+    //            if(register.exists())
+//            {
+//                Scanner fileWithLines = new Scanner(register);
+//
+//                while (fileWithLines.hasNext())
+//                {
+//                    String line = fileWithLines.nextLine();
+//                    try {
+//                        Scanner lineIn = new Scanner(line);
+//                        lineIn.useDelimiter("\t");
+//
+//                        actualName.put(lineIn.next(), lineIn.next());
+//                        lineIn.close();
+//                    }
+//                    catch (Exception e)
+//                    {
+//                        System.out.print(e + "@database text readin");
+//                    }
+//                }
+//                fileWithLines.close();
+//            }
+    private static class SessionSaver {
+        private static int firstTime;
+        private static int lastTime;
+        private static Map<Integer, Integer> aMap = new HashMap<Integer, Integer>();
+        private static String dbName;
+
+        private SessionSaver() {
+            this.firstTime = 0;
+            this.lastTime = 0;
+            this.dbName = "sessionSaver";
+
+        }
+
+        public SessionSaver(Map<Integer, Integer> old)
+        {
+            this();
+            this.load(old);
+        }
+
+        public static void add(int timestamp)
+        {
+            if(timestamp <= firstTime || firstTime == 0)
+                firstTime = timestamp;
+            else
+                lastTime = timestamp;
+        }
+
+        public static Map<Integer, Integer> getMap()
+        {
+            if(firstTime != lastTime)
+                aMap.put(firstTime, lastTime);
+
+            return aMap;
+        }
+        public void load(Map<? extends Integer, ? extends Integer> old)
+        {
+            aMap.putAll(old);
+        }
+
+        public static void store()
+        {
+            getMap();
+
+            final String thisObjectsName = PROJECTFOLDER + "\\" + dbName;
+
+            PrintWriter writerOLD;
+            try {
+                writerOLD = new PrintWriter(thisObjectsName);
+
+                for (int A : aMap.keySet())
+                {
+                    writerOLD.println(A + "," + aMap.get(A));
+                }
+
+                writerOLD.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+        private static void read()
+        {
+            String actualName = null;
+            Scanner in = null;
+            final File file = new File(PROJECTFOLDER + "\\" + dbName);
+            if(file.exists())
+            {
+                try
+                {
+                    in = new Scanner(file);
+                    do{
+                        String line = in.nextLine();
+                        try
+                        {
+                            Scanner lineIn = new Scanner(line);
+                            actualName = lineIn.next();
+                            try
+                            {
+                                aMap.put(Integer.valueOf(actualName.split(",")[0]),Integer.valueOf(actualName.split(",")[1]));
+                            }
+                            catch (Exception e)
+                            {
+                                System.out.print(e + "@database text readin");
+                            }
+                            lineIn.close();
+                        }
+                        catch (Exception e)
+                        {
+                            System.out.print(e + "@database text readin");
+                        }
+                    }while(in.hasNext());
+                    in.close();
+                }
+                catch (Exception e)
+                {
+                    System.out.println("\n"+ e + "@looking for equality, file: " + file.getName());
+                }
+            }
+        }
+    }
+
+    private static class Progressbar {
+        private int nrOfObjects;
+        private int progress = 0;
+        private int nrOfPrints = 0;
+        private static final String PROGRESS = "|";
+        public Progressbar(int nrOfObjects) {
+            this.nrOfObjects = nrOfObjects;
+        }
+        public Progressbar(int nrOfObjects,String printOnStart) {
+            this.nrOfObjects = nrOfObjects;
+            System.out.print(printOnStart);
+        }
+
+        public void printAndIncrement()
+        {
+            if(progress != 0)
+            {
+                final int prints = (int) (((float) progress / (float) nrOfObjects)*100 - nrOfPrints);
+                for (int i = 0; i < prints; i++)
+                {
+                    System.out.print(PROGRESS);
+                    nrOfPrints++;
+                }
+            }
+            else {
+                System.out.println("\n");
+            }
+            progress++;
+            if (progress == nrOfObjects)
+                System.out.println("\n");
+        }
+
+        public void printNrAndIncrement() {
+            if(progress != 0) {
+                if(progress % (nrOfObjects / 100)  == 0)
+                {
+                    System.out.print(progress);
+                }
+            }
+            else {
+                System.out.println("\n");
+            }
+            progress++;
+            if (progress == nrOfObjects)
+                System.out.println("\n");
+        }
+    }
+
+    public static class ScrobbleObject extends Track implements Comparable<ScrobbleObject>, Externalizable
+    {
+        String artist;
+        ScrobbleObject(String title, String artist, String album, int scrobbleCount)
+        {
+            super(title,"",artist);
+            this.album = album;
+            this.playcount = scrobbleCount;
+        }
+
+        ScrobbleObject(ScrobbleObject clone)
+        {
+            this(clone.getTitle(), clone.getArtist(), clone.getAlbum(),clone.getScrobbleCount());
+        }
+
+        ScrobbleObject(int scrobbleCount)
+        {
+            this("playCount",null,null,scrobbleCount);
+        }
+
+        ScrobbleObject()
+        {
+            this(null,null,null,1);
+        }
+
+        public ScrobbleObject(String title, String artist, String album) {
+            this(title,artist,album,1);
+        }
+
+        public ScrobbleObject(Track track) {
+            super(track.getName(), track.getUrl(), track.getMbid(),track.getPlaycount(), 0, false,
+            track.getArtist(), track.getArtistMbid(), false, track.isNowPlaying());
+            this.album = track.getAlbum();
+        }
+
+        public String getTitle(){return name;}
+        public int getScrobbleCount(){return playcount;}
+
+        public String present() {
+            return (this.getArtist() + " - " + this.getAlbum() + " - " + this.getName());
+        }
+
+        public void setScrobbleCount(int i) {
+            playcount = i;
+        }
+
+        public int compareTo(ScrobbleObject B)
+        {
+            if(playcount < B.getScrobbleCount())
+                return 1;
+            else if(playcount == B.getScrobbleCount())
+                return 0;
+            else
+                return -1;
+        }
+
+        public boolean equals(ScrobbleObject clone) throws IpodScrobbler.PlayCountDifferentException {
+            if(clone != null)
+            {
+                final String nameOfClone = nameGen(clone);
+                final String nameOfThis = nameGen(this);
+                final boolean sameName = nameOfClone.equals(nameOfThis);
+
+                final boolean sameItems = clone.getTitle().trim().toLowerCase().equals(name.trim().toLowerCase()) && clone.getArtist().trim().toLowerCase().equals(this.getArtist().trim().toLowerCase());
+                final boolean sameScrobbleCount = playcount == clone.getScrobbleCount();
+
+                final float thisDigits = Integer.valueOf(stripNonDigits(clone.getTitle()));
+                final float cloneDigits = Integer.valueOf(stripNonDigits(name));
+                final boolean eatherTheSameOrNoDigits = (thisDigits == cloneDigits) || (!(thisDigits > cloneDigits) && !(thisDigits < cloneDigits));
+
+                boolean lrNamesEqual = NameDupes.isLeftKnownByRightName(nameOfThis, nameOfClone) && eatherTheSameOrNoDigits;
+                boolean rlNamesEqual = NameDupes.isLeftKnownByRightName(nameOfClone, nameOfThis) && eatherTheSameOrNoDigits;
+
+
+                final boolean equalSomeHow = lrNamesEqual || rlNamesEqual || sameItems || sameName;
+
+                if (equalSomeHow && !sameScrobbleCount)
+                    throw new IpodScrobbler.PlayCountDifferentException(true, "playcount doesn't match");
+                else {
+                    return equalSomeHow;
+                }
+            }
+            else
+                return false;
+
+        }
+
+        public void setTitle(String s) {
+            name = s;
+        }
+
+        public void setArtist(String s)
+        {
+            artist = s;
+        }
+
+        public void subtractPlayCount(ScrobbleObject subtractor) {
+            this.playcount -= subtractor.getScrobbleCount();
+        }
+
+        public void increasePlayCountWith(ScrobbleObject additive) {
+            this.playcount += additive.getScrobbleCount();
+        }
+
+        public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+
+            this.name = in.toString();
+            this.url = in.toString();
+            this.mbid = in.toString();
+            this.setScrobbleCount(in.read( ));
+            this.listeners = in.read();
+            this.streamable = in.readBoolean();
+
+            /* i knowingly violate the protection of the artisvariable of the Track Superclass, i consider it necessary if i want to continue inheriting the trackclass rather than reimplement it my self*/
+
+            try {
+                Field field = Track.class.getDeclaredField("artist");
+                field.setAccessible(true);
+                field.set(this,in.toString());
+                field.setAccessible(false);
+            } catch (NoSuchFieldException e) {
+                e.printStackTrace();
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+            //this.artistMbid = in.toString();
+            //this.fullTrackAvailable = in.readBoolean();
+            //this.nowPlaying = in.readBoolean();
+            this.album = in.toString();
+        }
+
+        public void writeExternal(ObjectOutput out) throws IOException {
+            final String album1 = this.getAlbum();
+            final String url1 = this.getUrl();
+            final String mbid1 = this.getMbid();
+            out.writeChars(this.name);
+            out.writeChars(url1 == null ? "" : url1);
+            out.writeChars(mbid1 == null ? "" : mbid1);
+            out.writeInt(this.getPlaycount());
+            out.writeInt(this.listeners);
+            out.writeBoolean(this.streamable);
+            out.writeChars(this.getArtist());
+            //out.writeChars(this.getArtistMbid());
+            //out.writeBoolean(false);
+            //out.writeBoolean(this.isNowPlaying());
+            out.writeChars((album1 == null ? "" : album1));
+        }
+    }
+
+    public static class PlayCountDifferentException extends Exception {
+        final boolean value;
+
+        public PlayCountDifferentException(boolean value, String message) {
+            super(message);
+            this.value = value;
+        }
+
+        public PlayCountDifferentException() {
+           this.value = true;
+        }
+
+        public boolean getValue() {
+            return value;
+        }
+    }
+}

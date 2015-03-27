@@ -1,0 +1,26 @@
+
+
+
+scrammble the scrobble objects
+
+aa - ba - ca is not allowed to be aa - ba - da
+
+aa - ba - ca is allowed to be aa - ca - ba
+
+aa - ba - ca is allowed to be same as aa - Ba - ca
+
+lenght of first word + first letter + lenght of second word + second letter
+ lenght of third word + third letter
+
+scrobbleobjects[i].getArtist.charAt[0]
+ + scrobbleobjects[i].getAlbum.charAt[0]
+  + scrobbleobjects[i].getTitle.charAt[0]
+ + scrobbleobjects[i].getArtist.lenght
+ + scrobbleobjects[i].getTitle.lenght
+    + scrobbleobjects[i].getAlbum.lenght
+    + scrobbleobjects[i].getArtist.charAt[1]
+     + scrobbleobjects[i].getTitle.charAt[1]
+      + scrobbleobjects[i].getAlbum.charAt[1]
+       + scrobbleobjects[i].getArtist.charAt[2]
+        + scrobbleobjects[i].getTitle.charAt[2]
+         + scrobbleobjects[i].getAlbum.charAt[2]

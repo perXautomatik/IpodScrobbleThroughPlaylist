@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+Class-Path: jackson-mrbean-1.9.111.jar jackson-mapper-asl-1.9.111.jar 
+ jackson-core-asl-1.9.111.jar json-201401071.jar lastfm-java-0.1.21.ja
+ r
+Main-Class: commonMethods.CommonMethods
+

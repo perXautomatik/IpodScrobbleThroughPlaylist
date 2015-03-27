@@ -1,0 +1,43 @@
+Index: src/IpodScrobbler.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/IpodScrobbler.java	(revision )
++++ src/IpodScrobbler.java	(revision )
+@@ -991,19 +991,19 @@
+ 
+                 final boolean equals = (tag.getFirst(ID3v24Frames.FRAME_ID_ALBUM)).equals(scrO.getAlbum());
+                 if(!equals) {
+-                    tag.setField(FieldKey.ALBUM, scrO.getAlbum());
++                    tag.setField(FieldKey.ALBUM, new String(scrO.getAlbum().getBytes(), encoding));
+                     //tag.setAlbumTitle("\u0010" + scrO.getAlbum());
+                     changes = true;
+                 }
+                 final boolean equals1 = (tag.getFirst(ID3v24Frames.FRAME_ID_TITLE)).equals(scrO.getAlbum());
+                 if(!equals) {
+-                    tag.setField(FieldKey.ARTIST, scrO.getArtist());
++                    tag.setField(FieldKey.ARTIST, new String(scrO.getArtist().getBytes(), encoding));
+                     //tag.setLeadArtist("\u0010" + scrO.getArtist());
+                     changes = true;
+                 }
+                 final boolean equals2 = (tag.getFirst(ID3v24Frames.FRAME_ID_ARTIST)).equals(scrO.getAlbum());
+                 if(!equals) {
+-                    tag.setField(FieldKey.ARTIST,scrO.getTitle());
++                    tag.setField(FieldKey.ARTIST, new String(scrO.getTitle().getBytes(), encoding));
+         //            tag.setSongTitle("\u0010" + scrO.getTitle());
+                     changes = true;
+                 }
+@@ -1013,9 +1013,9 @@
+ //                tag.setField(FieldKey.ALBUM, new String(scrO.getAlbum().getBytes(), encoding));
+ //                tag.setField(FieldKey.ARTIST, new String(scrO.getAlbum().getBytes(), encoding));
+ //                tag.setField(FieldKey.ARTIST, new String(scrO.getAlbum().getBytes(), encoding));
+-                tag.setField(FieldKey.ALBUM, scrO.getAlbum());
+-                tag.setField(FieldKey.ARTIST, scrO.getArtist());
+-                tag.setField(FieldKey.ARTIST,scrO.getTitle());
++                tag.setField(FieldKey.ALBUM, new String(scrO.getAlbum().getBytes(), encoding));
++                tag.setField(FieldKey.ARTIST, new String(scrO.getArtist().getBytes(), encoding));
++                tag.setField(FieldKey.ARTIST, new String(scrO.getTitle().getBytes(), encoding));
+                 changes = true;
+             }
+ 
